@@ -1,16 +1,16 @@
-import { useState, type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Boxes,
   ClipboardList,
   FileBarChart,
   LayoutDashboard,
+  Loader2,
   LogOut,
   Menu,
   Package,
   Receipt,
-  Search,
   ShoppingCart,
   Truck,
   Users,
@@ -18,6 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
+import { ConfigNotice } from "@/components/erp/ui";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -35,6 +37,27 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = nav.find((n) => n.to === pathname);
+  const { user, loading, configured, signOutUser } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (configured && !loading && !user) navigate({ to: "/", replace: true });
+  }, [configured, loading, user, navigate]);
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    navigate({ to: "/", replace: true });
+  };
+
+  if (configured && (loading || !user)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const initial = (user?.email ?? "A").charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -78,7 +101,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               key={to}
               to={to}
               onClick={() => setOpen(false)}
-              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground data-[status=active]:bg-sidebar-accent data-[status=active]:text-sidebar-foreground"
+              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
               activeProps={{ className: "bg-sidebar-accent text-sidebar-foreground" }}
             >
               <Icon className="size-4 shrink-0" />
@@ -88,13 +111,13 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="border-t border-sidebar-border p-3">
-          <Link
-            to="/"
-            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          <button
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
             <LogOut className="size-4" />
             Sign out
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -111,27 +134,24 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             {current?.label ?? "StockCore ERP"}
           </p>
           <div className="ml-auto flex items-center gap-2">
-            <div className="relative hidden md:block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Search anything"
-                className="h-10 w-56 rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
             <button className="rounded-md p-2 hover:bg-muted" aria-label="Notifications">
               <Bell className="size-5" />
             </button>
             <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
               <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-                A
+                {initial}
               </span>
-              <span className="hidden text-sm font-medium sm:block">Admin</span>
+              <span className="hidden max-w-[12rem] truncate text-sm font-medium sm:block">
+                {user?.email ?? "Admin"}
+              </span>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 space-y-6 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="flex-1 space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+          {configured ? null : <ConfigNotice />}
+          {children}
+        </main>
       </div>
     </div>
   );
