@@ -1,6 +1,8 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Boxes, LineChart, Lock, Mail, ShieldCheck, Warehouse } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AlertTriangle, Boxes, LineChart, Loader2, ShieldCheck, Warehouse } from "lucide-react";
 import { Button, Field } from "@/components/erp/ui";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -21,8 +23,47 @@ export const Route = createFileRoute("/")({
   component: LoginPage,
 });
 
+function friendlyError(code: string): string {
+  if (code.includes("invalid-credential") || code.includes("wrong-password"))
+    return "That email and password don't match. Please try again.";
+  if (code.includes("user-not-found")) return "No account exists with that email address.";
+  if (code.includes("invalid-email")) return "That doesn't look like a valid email address.";
+  if (code.includes("too-many-requests"))
+    return "Too many attempts. Please wait a moment and try again.";
+  if (code.includes("network")) return "Couldn't reach the server. Check your connection.";
+  return "Sign in failed. Please try again.";
+}
+
 function LoginPage() {
   const navigate = useNavigate();
+  const { signIn, user, loading, configured } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate({ to: "/dashboard", replace: true });
+  }, [user, navigate]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!configured) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await signIn(email.trim(), password);
+      navigate({ to: "/dashboard", replace: true });
+    } catch (err) {
+      const code = err instanceof Error ? err.message : "";
+      setError(friendlyError(code));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[1.1fr_1fr]">
@@ -44,9 +85,9 @@ function LoginPage() {
           </p>
           <ul className="mt-8 space-y-3 text-sm">
             {[
-              { icon: Warehouse, text: "Live stock positions across every location" },
+              { icon: Warehouse, text: "Live stock positions, updated the moment they change" },
               { icon: LineChart, text: "Purchase and sales insight in one place" },
-              { icon: ShieldCheck, text: "Role-based admin controls" },
+              { icon: ShieldCheck, text: "Secure sign-in for your team" },
             ].map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3 text-sidebar-muted">
                 <Icon className="size-4 text-accent" />
@@ -73,44 +114,55 @@ function LoginPage() {
             Use your administrator credentials to continue.
           </p>
 
-          <form
-            className="mt-8 space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              navigate({ to: "/dashboard" });
-            }}
-          >
-            <div className="relative">
-              <Field label="Email address" type="email" placeholder="admin@company.com" />
-              <Mail className="pointer-events-none absolute bottom-3 right-3 size-4 text-muted-foreground" />
+          {loading ? (
+            <div className="mt-8 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Checking your session…
             </div>
-            <div className="relative">
-              <Field label="Password" type="password" placeholder="••••••••" />
-              <Lock className="pointer-events-none absolute bottom-3 right-3 size-4 text-muted-foreground" />
-            </div>
+          ) : (
+            <form className="mt-8 space-y-4" onSubmit={onSubmit}>
+              <Field
+                label="Email address"
+                type="email"
+                placeholder="admin@company.com"
+                value={email}
+                onChange={setEmail}
+                required
+              />
+              <Field
+                label="Password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={setPassword}
+                required
+              />
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 text-muted-foreground">
-                <input type="checkbox" className="size-4 rounded border-input accent-primary" />
-                Remember me
-              </label>
-              <button type="button" className="font-medium text-primary hover:underline">
-                Forgot password?
-              </button>
-            </div>
+              {error ? (
+                <p className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  {error}
+                </p>
+              ) : null}
 
-            <Button type="submit" className="w-full">
-              Sign in to dashboard
-            </Button>
-          </form>
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-2 text-muted-foreground">
+                  <input type="checkbox" className="size-4 rounded border-input accent-primary" />
+                  Remember me
+                </label>
+              </div>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Authentication is not wired up yet — signing in opens the{" "}
-            <Link to="/dashboard" className="font-medium text-primary hover:underline">
-              admin dashboard
-            </Link>
-            .
-          </p>
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                {busy ? "Signing in…" : "Sign in to dashboard"}
+              </Button>
+            </form>
+          )}
+
+          {!configured && !loading ? (
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Your database isn't connected yet, so sign-in is skipped for now.
+            </p>
+          ) : null}
         </div>
       </main>
     </div>
