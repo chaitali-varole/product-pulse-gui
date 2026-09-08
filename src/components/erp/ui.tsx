@@ -8,8 +8,8 @@ export function PageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
-  actions?: ReactNode;
+  description?: string | undefined;
+  actions?: ReactNode | undefined;
 }) {
   return (
     <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -60,11 +60,11 @@ export function Card({
   description,
   actions,
 }: {
-  children?: ReactNode;
-  className?: string;
+  children?: ReactNode | undefined;
+  className?: string | undefined;
   title?: string;
-  description?: string;
-  actions?: ReactNode;
+  description?: string | undefined;
+  actions?: ReactNode | undefined;
 }) {
   return (
     <section
@@ -97,10 +97,10 @@ export function StatCard({
   loading,
 }: {
   label: string;
-  value?: string | number;
-  hint?: string;
-  icon?: ReactNode;
-  loading?: boolean;
+  value?: string | number | undefined;
+  hint?: string | undefined;
+  icon?: ReactNode | undefined;
+  loading?: boolean | undefined;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5 shadow-card">
@@ -157,11 +157,11 @@ export function Table({
 }: {
   columns: string[];
   rows: number;
-  loading?: boolean;
-  error?: string | null;
-  emptyTitle?: string;
-  emptyBody?: string;
-  children?: ReactNode;
+  loading?: boolean | undefined;
+  error?: string | null | undefined;
+  emptyTitle?: string | undefined;
+  emptyBody?: string | undefined;
+  children?: ReactNode | undefined;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -254,14 +254,14 @@ export function Field({
 }: {
   label: string;
   type?: string;
-  placeholder?: string;
+  placeholder?: string | undefined;
   as?: "input" | "select" | "textarea";
-  options?: { value: string; label: string }[];
+  options?: { value: string; label: string }[] | undefined;
   value: string;
   onChange: (v: string) => void;
-  required?: boolean;
-  min?: string;
-  step?: string;
+  required?: boolean | undefined;
+  min?: string | undefined;
+  step?: string | undefined;
 }) {
   const base =
     "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
@@ -321,9 +321,9 @@ export function Modal({
   open: boolean;
   onClose: () => void;
   title: string;
-  description?: string;
+  description?: string | undefined;
   children: ReactNode;
-  footer?: ReactNode;
+  footer?: ReactNode | undefined;
 }) {
   useEffect(() => {
     if (!open) return;
