@@ -62,7 +62,7 @@ export function Card({
 }: {
   children?: ReactNode | undefined;
   className?: string | undefined;
-  title?: string;
+  title?: string | undefined;
   description?: string | undefined;
   actions?: ReactNode | undefined;
 }) {
