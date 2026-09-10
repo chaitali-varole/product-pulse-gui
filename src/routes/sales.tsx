@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/erp/AdminLayout";
 import {
   Button,
@@ -23,7 +23,12 @@ import {
   type Product,
   type Sale,
 } from "@/lib/collections";
-import { recordMovement, useCollection } from "@/hooks/useFirestore";
+import {
+  deleteMovement,
+  recordMovement,
+  updateMovement,
+  useCollection,
+} from "@/hooks/useFirestore";
 
 export const Route = createFileRoute("/sales")({
   head: () => ({
@@ -60,6 +65,8 @@ function SalesPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(empty());
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Sale | null>(null);
+  const [confirm, setConfirm] = useState<Sale | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +104,26 @@ function SalesPage() {
     }));
   };
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm(empty());
+    setError(null);
+    setOpen(true);
+  };
+
+  const openEdit = (sale: Sale) => {
+    setEditing(sale);
+    setForm({
+      customerId: sale.customerId ?? "",
+      productId: sale.productId ?? "",
+      quantity: String(sale.quantity ?? ""),
+      sellingPrice: String(sale.sellingPrice ?? ""),
+      saleDate: sale.saleDate ?? today(),
+    });
+    setError(null);
+    setOpen(true);
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected) {
@@ -104,34 +131,79 @@ function SalesPage() {
       return;
     }
     const qty = Number(form.quantity || 0);
-    if (qty > available) {
-      setError(`Only ${available} in stock. Reduce the quantity or record a purchase first.`);
+    const sameProduct = editing ? (productOf(editing.productId)?.id ?? null) === selected.id : false;
+    const allowance = available + (sameProduct ? Number(editing?.quantity ?? 0) : 0);
+    if (qty > allowance) {
+      setError(`Only ${allowance} in stock. Reduce the quantity or record a purchase first.`);
       return;
     }
     setBusy(true);
     setError(null);
-    const saleId = nextBusinessId("SAL", sales.data.length);
     try {
-      await recordMovement({
-        kind: "sale",
-        header: {
-          saleId,
-          customerId: form.customerId,
+      if (editing) {
+        const oldProduct = productOf(editing.productId);
+        await updateMovement({
+          kind: "sale",
+          docId: editing.id,
+          referenceId: editing.saleId,
+          header: {
+            customerId: form.customerId,
+            productId: selected.productId ?? selected.id,
+            quantity: qty,
+            sellingPrice: Number(form.sellingPrice || 0),
+            saleDate: form.saleDate,
+          },
+          oldProductDocId: oldProduct?.id ?? selected.id,
+          oldQuantity: Number(editing.quantity ?? 0),
+          productDocId: selected.id,
           productId: selected.productId ?? selected.id,
           quantity: qty,
-          sellingPrice: Number(form.sellingPrice || 0),
-          saleDate: form.saleDate,
-        },
-        productDocId: selected.id,
-        productId: selected.productId ?? selected.id,
-        quantity: qty,
-        referenceId: saleId,
-        date: form.saleDate,
-      });
+          date: form.saleDate,
+        });
+      } else {
+        const saleId = nextBusinessId("SAL", sales.data.length);
+        await recordMovement({
+          kind: "sale",
+          header: {
+            saleId,
+            customerId: form.customerId,
+            productId: selected.productId ?? selected.id,
+            quantity: qty,
+            sellingPrice: Number(form.sellingPrice || 0),
+            saleDate: form.saleDate,
+          },
+          productDocId: selected.id,
+          productId: selected.productId ?? selected.id,
+          quantity: qty,
+          referenceId: saleId,
+          date: form.saleDate,
+        });
+      }
       setForm(empty());
+      setEditing(null);
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't record this sale.");
+      setError(err instanceof Error ? err.message : "Couldn't save this sale.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm) return;
+    const product = productOf(confirm.productId);
+    setBusy(true);
+    try {
+      await deleteMovement({
+        kind: "sale",
+        docId: confirm.id,
+        referenceId: confirm.saleId,
+        productDocId: product?.id ?? "",
+        quantity: Number(confirm.quantity ?? 0),
+      });
+      setConfirm(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't delete this sale.");
     } finally {
       setBusy(false);
     }
@@ -145,7 +217,7 @@ function SalesPage() {
         title="Sales Management"
         description="Record goods sold to customers. Each entry reduces stock and logs a movement automatically."
         actions={
-          <Button onClick={() => setOpen(true)} disabled={!canRecord}>
+          <Button onClick={openAdd} disabled={!canRecord}>
             <Plus className="size-4" /> Record sale
           </Button>
         }
@@ -185,7 +257,7 @@ function SalesPage() {
           />
         </Toolbar>
         <Table
-          columns={["Reference", "Customer", "Product", "Quantity", "Unit price", "Total", "Date"]}
+          columns={["Reference", "Customer", "Product", "Quantity", "Unit price", "Total", "Date", ""]}
           rows={filtered.length}
           loading={sales.loading}
           error={sales.error}
@@ -207,6 +279,24 @@ function SalesPage() {
                 {formatMoney(Number(s.quantity ?? 0) * Number(s.sellingPrice ?? 0))}
               </Td>
               <Td className="text-muted-foreground">{formatDate(s.saleDate)}</Td>
+              <Td>
+                <div className="flex justify-end gap-1">
+                  <button
+                    onClick={() => openEdit(s)}
+                    aria-label={`Edit ${s.saleId}`}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirm(s)}
+                    aria-label={`Delete ${s.saleId}`}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </Td>
             </tr>
           ))}
         </Table>
@@ -215,8 +305,10 @@ function SalesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Record sale"
-        description="Reduces stock and writes a movement entry"
+        title={editing ? "Edit sale" : "Record sale"}
+        description={
+          editing ? `${editing.saleId} — stock adjusts automatically` : "Reduces stock and writes a movement entry"
+        }
       >
         <form className="space-y-4" onSubmit={save}>
           <Field
@@ -280,10 +372,30 @@ function SalesPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Record sale"}
+              {busy ? "Saving…" : editing ? "Save changes" : "Record sale"}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(confirm)}
+        onClose={() => setConfirm(null)}
+        title="Delete sale?"
+        description={confirm?.saleId}
+      >
+        <p className="text-sm text-muted-foreground">
+          This removes the sale, returns the {confirm?.quantity ?? 0} unit
+          {Number(confirm?.quantity ?? 0) === 1 ? "" : "s"} to stock and deletes its movement entry.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirm(null)}>
+            Keep it
+          </Button>
+          <Button variant="danger" onClick={remove} disabled={busy}>
+            {busy ? "Deleting…" : "Delete sale"}
+          </Button>
+        </div>
       </Modal>
     </AdminLayout>
   );
