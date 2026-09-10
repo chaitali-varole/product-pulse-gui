@@ -4,14 +4,17 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
   type DocumentData,
+  type Firestore,
 } from "firebase/firestore";
 import { getDb, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/collections";
