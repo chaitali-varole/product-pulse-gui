@@ -4,14 +4,17 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
   writeBatch,
   type DocumentData,
+  type Firestore,
 } from "firebase/firestore";
 import { getDb, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/collections";
@@ -115,6 +118,100 @@ export async function recordMovement(opts: {
   batch.update(doc(db, COLLECTIONS.products, opts.productDocId), {
     quantity: increment(isPurchase ? opts.quantity : -opts.quantity),
   });
+
+  await batch.commit();
+}
+
+const sign = (kind: "purchase" | "sale") => (kind === "purchase" ? 1 : -1);
+
+async function movementTxRefs(db: Firestore, referenceId: string) {
+  const snap = await getDocs(
+    query(collection(db, COLLECTIONS.stockTransactions), where("referenceId", "==", referenceId)),
+  );
+  return snap.docs;
+}
+
+/**
+ * Edits an existing purchase/sale, reversing its old stock effect and applying
+ * the new one, and keeps the matching stock_transactions entry in step.
+ */
+export async function updateMovement(opts: {
+  kind: "purchase" | "sale";
+  docId: string;
+  header: Record<string, unknown>;
+  referenceId: string;
+  oldProductDocId: string;
+  oldQuantity: number;
+  productDocId: string;
+  productId: string;
+  quantity: number;
+  date: string;
+}) {
+  const db = requireDb();
+  const txDocs = await movementTxRefs(db, opts.referenceId);
+  const batch = writeBatch(db);
+  const s = sign(opts.kind);
+
+  batch.update(
+    doc(db, opts.kind === "purchase" ? COLLECTIONS.purchases : COLLECTIONS.sales, opts.docId),
+    opts.header,
+  );
+
+  if (opts.oldProductDocId === opts.productDocId) {
+    const delta = s * (opts.quantity - opts.oldQuantity);
+    if (delta !== 0) batch.update(doc(db, COLLECTIONS.products, opts.productDocId), { quantity: increment(delta) });
+  } else {
+    batch.update(doc(db, COLLECTIONS.products, opts.oldProductDocId), {
+      quantity: increment(-s * opts.oldQuantity),
+    });
+    batch.update(doc(db, COLLECTIONS.products, opts.productDocId), {
+      quantity: increment(s * opts.quantity),
+    });
+  }
+
+  const txValues = {
+    productId: opts.productId,
+    type: opts.kind === "purchase" ? "IN" : "OUT",
+    quantity: opts.quantity,
+    referenceId: opts.referenceId,
+    date: opts.date,
+  };
+  if (txDocs.length) {
+    txDocs.forEach((d, i) => {
+      if (i === 0) batch.update(d.ref, txValues);
+      else batch.delete(d.ref);
+    });
+  } else {
+    const txRef = doc(collection(db, COLLECTIONS.stockTransactions));
+    batch.set(txRef, {
+      transactionId: `TXN-${txRef.id.slice(0, 6).toUpperCase()}`,
+      ...txValues,
+      createdAt: serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
+}
+
+/** Deletes a purchase/sale, reverses its stock effect and removes its movement entry. */
+export async function deleteMovement(opts: {
+  kind: "purchase" | "sale";
+  docId: string;
+  referenceId: string;
+  productDocId: string;
+  quantity: number;
+}) {
+  const db = requireDb();
+  const txDocs = await movementTxRefs(db, opts.referenceId);
+  const batch = writeBatch(db);
+
+  batch.delete(
+    doc(db, opts.kind === "purchase" ? COLLECTIONS.purchases : COLLECTIONS.sales, opts.docId),
+  );
+  batch.update(doc(db, COLLECTIONS.products, opts.productDocId), {
+    quantity: increment(-sign(opts.kind) * opts.quantity),
+  });
+  txDocs.forEach((d) => batch.delete(d.ref));
 
   await batch.commit();
 }

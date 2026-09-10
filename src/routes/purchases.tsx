@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { AdminLayout } from "@/components/erp/AdminLayout";
 import {
   Button,
@@ -23,7 +23,12 @@ import {
   type Purchase,
   type Supplier,
 } from "@/lib/collections";
-import { recordMovement, useCollection } from "@/hooks/useFirestore";
+import {
+  deleteMovement,
+  recordMovement,
+  updateMovement,
+  useCollection,
+} from "@/hooks/useFirestore";
 
 export const Route = createFileRoute("/purchases")({
   head: () => ({
@@ -60,6 +65,8 @@ function PurchasesPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(empty());
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Purchase | null>(null);
+  const [confirm, setConfirm] = useState<Purchase | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,6 +102,26 @@ function PurchasesPage() {
     }));
   };
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm(empty());
+    setError(null);
+    setOpen(true);
+  };
+
+  const openEdit = (p: Purchase) => {
+    setEditing(p);
+    setForm({
+      supplierId: p.supplierId ?? "",
+      productId: p.productId ?? "",
+      quantity: String(p.quantity ?? ""),
+      purchasePrice: String(p.purchasePrice ?? ""),
+      purchaseDate: p.purchaseDate ?? today(),
+    });
+    setError(null);
+    setOpen(true);
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const product = productOf(form.productId);
@@ -102,30 +129,74 @@ function PurchasesPage() {
       setError("Choose a product first.");
       return;
     }
+    const qty = Number(form.quantity || 0);
     setBusy(true);
     setError(null);
-    const purchaseId = nextBusinessId("PUR", purchases.data.length);
     try {
-      await recordMovement({
-        kind: "purchase",
-        header: {
-          purchaseId,
-          supplierId: form.supplierId,
+      if (editing) {
+        const oldProduct = productOf(editing.productId);
+        await updateMovement({
+          kind: "purchase",
+          docId: editing.id,
+          referenceId: editing.purchaseId,
+          header: {
+            supplierId: form.supplierId,
+            productId: product.productId ?? product.id,
+            quantity: qty,
+            purchasePrice: Number(form.purchasePrice || 0),
+            purchaseDate: form.purchaseDate,
+          },
+          oldProductDocId: oldProduct?.id ?? product.id,
+          oldQuantity: Number(editing.quantity ?? 0),
+          productDocId: product.id,
           productId: product.productId ?? product.id,
-          quantity: Number(form.quantity || 0),
-          purchasePrice: Number(form.purchasePrice || 0),
-          purchaseDate: form.purchaseDate,
-        },
-        productDocId: product.id,
-        productId: product.productId ?? product.id,
-        quantity: Number(form.quantity || 0),
-        referenceId: purchaseId,
-        date: form.purchaseDate,
-      });
+          quantity: qty,
+          date: form.purchaseDate,
+        });
+      } else {
+        const purchaseId = nextBusinessId("PUR", purchases.data.length);
+        await recordMovement({
+          kind: "purchase",
+          header: {
+            purchaseId,
+            supplierId: form.supplierId,
+            productId: product.productId ?? product.id,
+            quantity: qty,
+            purchasePrice: Number(form.purchasePrice || 0),
+            purchaseDate: form.purchaseDate,
+          },
+          productDocId: product.id,
+          productId: product.productId ?? product.id,
+          quantity: qty,
+          referenceId: purchaseId,
+          date: form.purchaseDate,
+        });
+      }
       setForm(empty());
+      setEditing(null);
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't record this purchase.");
+      setError(err instanceof Error ? err.message : "Couldn't save this purchase.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm) return;
+    const product = productOf(confirm.productId);
+    setBusy(true);
+    try {
+      await deleteMovement({
+        kind: "purchase",
+        docId: confirm.id,
+        referenceId: confirm.purchaseId,
+        productDocId: product?.id ?? "",
+        quantity: Number(confirm.quantity ?? 0),
+      });
+      setConfirm(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't delete this purchase.");
     } finally {
       setBusy(false);
     }
@@ -139,7 +210,7 @@ function PurchasesPage() {
         title="Purchase Management"
         description="Record goods bought from suppliers. Each entry adds stock and logs a movement automatically."
         actions={
-          <Button onClick={() => setOpen(true)} disabled={!canRecord}>
+          <Button onClick={openAdd} disabled={!canRecord}>
             <Plus className="size-4" /> Record purchase
           </Button>
         }
@@ -179,7 +250,7 @@ function PurchasesPage() {
           />
         </Toolbar>
         <Table
-          columns={["Reference", "Supplier", "Product", "Quantity", "Unit price", "Total", "Date"]}
+          columns={["Reference", "Supplier", "Product", "Quantity", "Unit price", "Total", "Date", ""]}
           rows={filtered.length}
           loading={purchases.loading}
           error={purchases.error}
@@ -201,6 +272,24 @@ function PurchasesPage() {
                 {formatMoney(Number(p.quantity ?? 0) * Number(p.purchasePrice ?? 0))}
               </Td>
               <Td className="text-muted-foreground">{formatDate(p.purchaseDate)}</Td>
+              <Td>
+                <div className="flex justify-end gap-1">
+                  <button
+                    onClick={() => openEdit(p)}
+                    aria-label={`Edit ${p.purchaseId}`}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirm(p)}
+                    aria-label={`Delete ${p.purchaseId}`}
+                    className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </Td>
             </tr>
           ))}
         </Table>
@@ -209,8 +298,10 @@ function PurchasesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Record purchase"
-        description="Adds stock and writes a movement entry"
+        title={editing ? "Edit purchase" : "Record purchase"}
+        description={
+          editing ? `${editing.purchaseId} — stock adjusts automatically` : "Adds stock and writes a movement entry"
+        }
       >
         <form className="space-y-4" onSubmit={save}>
           <Field
@@ -269,10 +360,31 @@ function PurchasesPage() {
               Cancel
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Record purchase"}
+              {busy ? "Saving…" : editing ? "Save changes" : "Record purchase"}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(confirm)}
+        onClose={() => setConfirm(null)}
+        title="Delete purchase?"
+        description={confirm?.purchaseId}
+      >
+        <p className="text-sm text-muted-foreground">
+          This removes the purchase, takes the {confirm?.quantity ?? 0} unit
+          {Number(confirm?.quantity ?? 0) === 1 ? "" : "s"} back out of stock and deletes its
+          movement entry.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirm(null)}>
+            Keep it
+          </Button>
+          <Button variant="danger" onClick={remove} disabled={busy}>
+            {busy ? "Deleting…" : "Delete purchase"}
+          </Button>
+        </div>
       </Modal>
     </AdminLayout>
   );
