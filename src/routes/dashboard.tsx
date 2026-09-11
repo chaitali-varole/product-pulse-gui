@@ -77,6 +77,7 @@ function DashboardPage() {
           value={products.data.length}
           icon={<Package className="size-5" />}
           loading={products.loading}
+          to="/products"
         />
         <StatCard
           label="Stock valuation"
@@ -84,18 +85,21 @@ function DashboardPage() {
           hint="At purchase price"
           icon={<Warehouse className="size-5" />}
           loading={products.loading}
+          to="/stock"
         />
         <StatCard
           label="Purchases this month"
           value={purchases.data.length ? formatMoney(monthPurchases) : undefined}
           icon={<ShoppingCart className="size-5" />}
           loading={purchases.loading}
+          to="/purchases"
         />
         <StatCard
           label="Sales this month"
           value={sales.data.length ? formatMoney(monthSales) : undefined}
           icon={<Receipt className="size-5" />}
           loading={sales.loading}
+          to="/sales"
         />
       </div>
 
@@ -105,20 +109,25 @@ function DashboardPage() {
           value={suppliers.data.length}
           icon={<Truck className="size-5" />}
           loading={suppliers.loading}
+          to="/suppliers"
         />
         <StatCard
           label="Customers"
           value={customers.data.length}
           icon={<Users className="size-5" />}
           loading={customers.loading}
+          to="/customers"
         />
         <StatCard
           label="Out of stock items"
           value={products.data.filter((p) => Number(p.quantity ?? 0) <= 0).length}
           icon={<AlertTriangle className="size-5" />}
           loading={products.loading}
+          to="/stock"
+          search={{ status: "out" }}
         />
       </div>
+
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card
