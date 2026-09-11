@@ -113,15 +113,23 @@ function StockPage() {
       <Card title="Stock on hand" description="Every product with its current balance">
         <Toolbar>
           <SearchInput value={search} onChange={setSearch} placeholder="Search product or code" />
-          <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm">
-            <input
-              type="checkbox"
-              checked={lowOnly}
-              onChange={(e) => setLowOnly(e.target.checked)}
-              className="size-4 accent-primary"
-            />
-            Low stock only
-          </label>
+          <div className="flex h-10 items-center gap-1 rounded-md border border-border p-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setActive(f.key)}
+                className={
+                  active === f.key
+                    ? "cursor-pointer rounded px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground"
+                    : "cursor-pointer rounded px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted"
+                }
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
         </Toolbar>
         <Table
           columns={[
