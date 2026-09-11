@@ -95,15 +95,19 @@ export function StatCard({
   hint,
   icon,
   loading,
+  to,
+  search,
 }: {
   label: string;
   value?: string | number | undefined;
   hint?: string | undefined;
   icon?: ReactNode | undefined;
   loading?: boolean | undefined;
+  to?: string | undefined;
+  search?: Record<string, string> | undefined;
 }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+  const body = (
+    <>
       <div className="flex items-start justify-between">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
         {icon ? <span className="text-primary">{icon}</span> : null}
@@ -118,9 +122,28 @@ export function StatCard({
         )}
       </p>
       {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
+    </>
   );
+
+  const base = "rounded-xl border border-border bg-card p-5 shadow-card";
+
+  if (to) {
+    return (
+      <Link
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        to={to as any}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        search={search as any}
+        className={`${base} block cursor-pointer transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+      >
+        {body}
+      </Link>
+    );
+  }
+
+  return <div className={base}>{body}</div>;
 }
+
 
 export function SearchInput({
   value,
