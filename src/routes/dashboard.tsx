@@ -168,7 +168,20 @@ function DashboardPage() {
           </Table>
         </Card>
 
-        <Card title="Low stock alerts" description={`${LOW_STOCK} units or fewer`}>
+        <Card
+          title="Low stock alerts"
+          description={`${LOW_STOCK} units or fewer`}
+          actions={
+            <Link
+              to="/stock"
+              search={{ status: "low" }}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              View all
+            </Link>
+          }
+        >
+
           <div className="divide-y divide-border">
             {products.loading ? (
               <p className="px-5 py-10 text-center text-xs text-muted-foreground">Loading…</p>
