@@ -21,6 +21,9 @@ import {
 import { useCollection } from "@/hooks/useFirestore";
 
 export const Route = createFileRoute("/stock")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    status: typeof search.status === "string" ? search.status : "all",
+  }),
   head: () => ({
     meta: [
       { title: "Current Stock — StockCore ERP" },
@@ -37,13 +40,24 @@ export const Route = createFileRoute("/stock")({
 });
 
 const LOW_STOCK = 10;
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "low", label: "Low stock" },
+  { key: "out", label: "Out of stock" },
+] as const;
 
 function StockPage() {
   const products = useCollection<Product>(COLLECTIONS.products);
   const transactions = useCollection<StockTransaction>(COLLECTIONS.stockTransactions);
   const suppliers = useCollection<Supplier>(COLLECTIONS.suppliers);
+  const { status } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const [search, setSearch] = useState("");
-  const [lowOnly, setLowOnly] = useState(false);
+
+  const active = FILTERS.some((f) => f.key === status) ? status : "all";
+  const setActive = (key: string) => {
+    void navigate({ search: { status: key } });
+  };
 
   const movement = (productId: string, type: "IN" | "OUT") =>
     transactions.data
@@ -52,15 +66,20 @@ function StockPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return products.data.filter(
-      (p) =>
-        (!lowOnly || Number(p.quantity ?? 0) <= LOW_STOCK) &&
+    return products.data.filter((p) => {
+      const qty = Number(p.quantity ?? 0);
+      const matchesStatus =
+        active === "low" ? qty > 0 && qty <= LOW_STOCK : active === "out" ? qty <= 0 : true;
+      return (
+        matchesStatus &&
         (!q ||
           p.productName?.toLowerCase().includes(q) ||
           p.productId?.toLowerCase().includes(q) ||
-          p.category?.toLowerCase().includes(q)),
-    );
-  }, [products.data, search, lowOnly]);
+          p.category?.toLowerCase().includes(q))
+      );
+    });
+  }, [products.data, search, active]);
+
 
   const totalUnits = products.data.reduce((s, p) => s + Number(p.quantity ?? 0), 0);
   const valuation = products.data.reduce(
