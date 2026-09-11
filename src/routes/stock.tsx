@@ -22,7 +22,7 @@ import { useCollection } from "@/hooks/useFirestore";
 
 export const Route = createFileRoute("/stock")({
   validateSearch: (search: Record<string, unknown>) => ({
-    status: typeof search.status === "string" ? search.status : "all",
+    status: typeof search["status"] === "string" ? search["status"] : "all",
   }),
   head: () => ({
     meta: [
